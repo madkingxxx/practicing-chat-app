@@ -1,0 +1,6 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory '/home/madkingxxx/projects/go/src/github.com/web-socket'
+# echo "Creating migration "
+migrate create -seq -ext sql -dir  migrations 
+make: Leaving directory '/home/madkingxxx/projects/go/src/github.com/web-socket'
+ 

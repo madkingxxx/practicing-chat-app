@@ -1,0 +1,58 @@
+definitions:
+  entity.Message:
+    properties:
+      content:
+        type: string
+      id:
+        type: string
+      receiver_id:
+        type: string
+      sender_id:
+        type: string
+    type: object
+  v1.response:
+    properties:
+      error:
+        type: string
+    type: object
+  v1.sendMessageRequest:
+    properties:
+      content:
+        type: string
+      receiver_id:
+        type: string
+      sender_id:
+        type: string
+    type: object
+info:
+  contact: {}
+  version: "1.0"
+paths:
+  /v1/message/send:
+    post:
+      consumes:
+      - application/json
+      description: Send Message to Client
+      operationId: send-message
+      parameters:
+      - description: Message
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/v1.sendMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/entity.Message'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.response'
+      summary: Send Messsage
+      tags:
+      - message
+swagger: "2.0"
