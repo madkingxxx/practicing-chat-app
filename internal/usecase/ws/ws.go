@@ -2,12 +2,15 @@ package ws
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 	"web-socket/internal/entity"
 	"web-socket/pkg/response"
 
@@ -26,7 +29,7 @@ func ServerWS(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 	if has, clientId := r.URL.Query().Has("client-id"), r.URL.Query().Get("client-id"); has {
 		fmt.Println("the client ID", clientId)
-		hub.AddClient(clientId, &Client{conn: conn})
+		hub.AddClient(clientId, &Client{clientId: clientId, conn: conn, hub: hub})
 	} else {
 		response.HandleMessage(w, http.StatusBadRequest, errors.New("client-id is required"))
 	}
@@ -61,7 +64,9 @@ func (h *Hub) SendMessage(payload entity.Message) error {
 }
 
 type Client struct {
-	conn *websocket.Conn
+	conn     *websocket.Conn
+	hub      *Hub
+	clientId string
 }
 
 var (
@@ -70,22 +75,43 @@ var (
 )
 
 func (c *Client) Read() {
-	for {
-		msgType, message, err := c.conn.ReadMessage()
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Print("err: ", err)
-				continue
+	msgChan := make(chan string)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func(ctx context.Context) {
+		for {
+			_, message, err := c.conn.ReadMessage()
+			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					log.Print("err: ", err)
+				}
+				log.Print("not covered err: ", err)
+				if err := c.Close(); err != nil {
+					log.Print("close err: ", err)
+				}
+				return
 			}
-			log.Print("other err ", err)
-			continue
+			msgChan <- strings.ToLower(string(bytes.TrimSpace(bytes.ReplaceAll(message, newline, space))))
 		}
-		if msgType == websocket.CloseMessage {
+	}(ctx)
+	for {
+		select {
+		case msg := <-msgChan:
+			if msg == "ping" {
+				c.Write([]byte("pong"))
+			}
+		case <-time.After(time.Second * 3):
+			if err := c.Close(); err != nil {
+				log.Print("close err: ", err)
+			}
+			cancel()
 			return
 		}
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		fmt.Printf("the message: %s :: type : %d", string(message), msgType)
 	}
+}
+
+func (c *Client) Close() error {
+	delete(c.hub.clients, c.clientId)
+	return c.conn.Close()
 }
 
 func (c *Client) Write(message []byte) error {
